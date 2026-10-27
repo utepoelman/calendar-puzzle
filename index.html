@@ -19,17 +19,24 @@ svg{width:100%;height:auto;touch-action:none;user-select:none;background:var(--c
 .lb{fill:var(--fg);text-anchor:middle;dominant-baseline:central;pointer-events:none;font-weight:600}
 .pc{stroke:#fff;stroke-width:1.5;cursor:grab;stroke-linejoin:round}.pc.sel{stroke:var(--fg);stroke-width:3}
 p.h{font-size:.82rem;opacity:.75;margin:8px 2px}
+#md{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9;padding:12px;overflow:auto}#md[hidden]{display:none}
+.box{background:var(--card);color:var(--fg);border-radius:14px;padding:22px;max-width:640px;width:100%;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.4)}.box h2{margin:.2em 0 .5em}
+.acts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:16px}.box input{width:80%;max-width:320px;font-size:1.1rem;text-align:center}
+.cert{background:#fffdf6;color:#2a2a2a;border:6px double #b58a1b;padding:28px 18px;font-family:Georgia,'Times New Roman',serif}.cert h2{font-size:1.9rem;margin:.3em 0 .6em;color:#8a6410}
+.cert .nm{font-size:2rem;font-style:italic;border-bottom:1px solid #b58a1b;display:inline-block;padding:0 24px;margin:10px 0 14px;min-width:200px}
+@media print{@page{size:landscape;margin:10mm}body>*:not(#md){display:none!important}#md{position:static;background:none;padding:0;display:block}.box{box-shadow:none;padding:0;max-width:none}.acts{display:none}}
 </style></head><body>
 <h1>Calendar Puzzle</h1>
 <div class="bar">
 <label>Board <select id="bd"><option value="squares">Squares</option><option value="triangles">Triangles</option><option value="hexagons">Hexagons</option></select></label>
-<label>Level <select id="lv"><option value="14">Easy (14 pieces)</option><option value="12" selected>Medium (12)</option><option value="10">Hard (10)</option></select></label>
+<label>Level <select id="lv"><option value="14">🌶️ Mild (14 pieces)</option><option value="12" selected>🌶️🌶️ Medium (12 pieces)</option><option value="10">🌶️🌶️🌶️ Spicy (10 pieces)</option></select></label>
 <label>Date <input type="date" id="dt"></label>
 <button id="rot">Rotate ↻</button><button id="flp">Flip ⇋</button>
 <button id="nw">New pieces</button><button id="rs">Reset</button><button id="sol">Solution</button>
 <span id="st"></span></div>
 <svg id="svg"><g id="L"></g></svg>
 <p class="h">Drag pieces onto the board. To rotate a piece, press Space, click it again, or twist two fingers on it (touch screens). Flip with the Flip button or F. Cover everything except the month, day and weekday of the chosen date.</p>
+<div id="md" hidden><div class="box" id="bx"></div></div>
 <script>
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const S3=Math.sqrt(3),$=id=>document.getElementById(id);
@@ -58,15 +65,15 @@ const shuf=a=>{for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i]
 function enumSets(st,size,free){let lv=[[st]];for(let i=1;i<size;i++){const seen=new Set(),nx=[];
  for(const s of lv)for(const x of s)for(const y of board.adj[x])if(free[y]&&!s.includes(y)){const t=[...s,y].sort((a,b)=>a-b),k=t.join();if(!seen.has(k)){seen.add(k);nx.push(t)}}lv=nx}return lv}
 function partition(k){
- const total=board.cells.length-3;k=Math.max(k,Math.ceil(total/5));
+ const total=board.cells.length-3;
  for(let at=0;at<300;at++){
-  const sz=Array(k).fill(3);let ex=total-3*k;while(ex>0){const i=Math.random()*k|0;if(sz[i]<5){sz[i]++;ex--}}
-  const cnt={3:0,4:0,5:0};sz.forEach(x=>cnt[x]++);
+  const sz=Array(k).fill(3);let ex=total-3*k;while(ex>0){const c=sz.map((v,i)=>v<5?i:-1).filter(i=>i>=0),i=c.length?c[Math.random()*c.length|0]:Math.random()*k|0;sz[i]++;ex--}
+  const cnt={3:0,4:0,5:0,6:0};sz.forEach(x=>cnt[x]++);
   const free=board.cells.map((_,i)=>!tgt.includes(i)),out=[];let steps=0;
   const rec=()=>{let best=-1,bd=9;
    for(let i=0;i<free.length;i++)if(free[i]){const d=board.adj[i].filter(j=>free[j]).length;if(d<bd){bd=d;best=i}}
    if(best<0)return true;if(bd==0||++steps>4000)return false;
-   for(const n of shuf([3,4,5].filter(n=>cnt[n]>0)))for(const s of shuf(enumSets(best,n,free))){
+   for(const n of shuf([3,4,5,6].filter(n=>cnt[n]>0)))for(const s of shuf(enumSets(best,n,free))){
     s.forEach(i=>free[i]=false);cnt[n]--;out.push(s);if(rec())return true;out.pop();cnt[n]++;s.forEach(i=>free[i]=true);if(steps>4000)return false}
    return false};
   if(rec())return out}
@@ -79,7 +86,7 @@ function newGame(keep){
  const parts=partition(+$('lv').value);
  pieces=parts.map((idx,i)=>{const cc=idx.map(j=>board.cells[j].c);
   return{id:i,cells:idx,polys:idx.map(j=>board.cells[j].poly),cc,cen:[0,1].map(a=>cc.reduce((s,c)=>s+c[a],0)/cc.length),rot:0,flip:0,tx:0,ty:0,at:null,col:Math.round(i*360/parts.length)}});
- sel=null;layout();render()}
+ sel=null;done=false;cheat=false;layout();render()}
 function layout(){
  const cs=board.cells;let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
  cs.forEach(c=>c.poly.forEach(p=>{x0=Math.min(x0,p[0]);y0=Math.min(y0,p[1]);x1=Math.max(x1,p[0]);y1=Math.max(y1,p[1])}));
@@ -122,7 +129,8 @@ function render(){
   p.polys.forEach(po=>{h+=`<polygon class="pc${sel===p.id?' sel':''}" data-id="${p.id}" points="${po.map(q=>{const r=M(p,q);return(r[0]+p.tx).toFixed(1)+','+(r[1]+p.ty).toFixed(1)}).join(' ')}"/>`});h+='</g>'});
  $('L').innerHTML=h;
  const k=pieces.filter(p=>p.at).length;
- $('st').textContent=k==pieces.length?'Solved! 🎉':`${k} / ${pieces.length} placed`}
+ $('st').textContent=k==pieces.length?'Solved! 🎉':`${k} / ${pieces.length} placed`;
+ if(k===pieces.length&&!done&&!cheat){done=true;setTimeout(showWin,500)}else if(k<pieces.length&&!cheat)done=false}
 const svg=$('svg');
 const pt=e=>{const p=svg.createSVGPoint();p.x=e.clientX;p.y=e.clientY;const q=p.matrixTransform(svg.getScreenCTM().inverse());return[q.x,q.y]};
 let gest=null;
@@ -143,10 +151,28 @@ addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==
  if(!p)return;if(e.key==='r'||e.key==='R')rotate(p);if(e.key==='f'||e.key==='F')flip(p)});
 addEventListener('keyup',e=>{if(e.key===' '&&e.target.tagName!=='INPUT'&&e.target.tagName!=='SELECT')e.preventDefault()});
 $('nw').onclick=()=>newGame();
-$('rs').onclick=()=>{layout();render()};
-$('sol').onclick=()=>{pieces.forEach(p=>{p.rot=0;p.flip=0;p.tx=board.off[0];p.ty=board.off[1];p.at=p.cells.slice()});sel=null;render();$('st').textContent='Solution shown'};
+$('rs').onclick=()=>{done=false;cheat=false;layout();render()};
+$('sol').onclick=()=>{cheat=true;pieces.forEach(p=>{p.rot=0;p.flip=0;p.tx=board.off[0];p.ty=board.off[1];p.at=p.cells.slice()});sel=null;render();$('st').textContent='Solution shown'};
 ['bd','lv','dt'].forEach(id=>$(id).onchange=()=>newGame());
 const t=new Date(),z=x=>String(x).padStart(2,'0');
 $('dt').value=`${t.getFullYear()}-${z(t.getMonth()+1)}-${z(t.getDate())}`;
+let done=false,cheat=false,pname='';
+const md=$('md'),bx=$('bx');
+function showWin(){md.hidden=false;
+ bx.innerHTML=`<h2>🎉 Congratulations!</h2><p>You covered the whole board except the date, using all ${pieces.length} pieces. Well done!</p><div class="acts"><button class="p" id="b1">Get a certificate</button><button id="b2">Try a different puzzle</button><button id="b3">Close</button></div>`;
+ $('b1').onclick=askName;$('b2').onclick=()=>{md.hidden=true;newGame()};$('b3').onclick=()=>md.hidden=true}
+function askName(){
+ bx.innerHTML=`<h2>Your certificate</h2><p>Enter your name as it should appear on the certificate:</p><input id="nm" maxlength="40" placeholder="Your name"><div class="acts"><button class="p" id="b1">Show certificate</button><button id="b2">Back</button></div>`;
+ const inp=$('nm');inp.value=pname;inp.focus();
+ const go=()=>{const v=inp.value.trim();if(!v){inp.focus();return}pname=v;cert()};
+ $('b1').onclick=go;inp.onkeydown=e=>{if(e.key==='Enter')go()};$('b2').onclick=showWin}
+function cert(){
+ const [Y,Mo,D]=$('dt').value.split('-').map(Number);
+ const o={weekday:'long',year:'numeric',month:'long',day:'numeric'};
+ bx.innerHTML=`<div class="cert"><div style="letter-spacing:.25em;font-size:.8rem">CALENDAR PUZZLE</div><h2>Certificate of Achievement</h2><div>This certifies that</div><div class="nm" id="cn"></div><div>has successfully solved the puzzle, covering every space except the date</div><div style="font-size:1.3rem;margin:10px 0"><b id="cd"></b></div><div id="cl" style="font-size:.9rem"></div><div style="margin-top:16px;font-size:.85rem">Completed on <span id="cc"></span></div></div><div class="acts"><button class="p" id="b1">Print / Save as PDF</button><button id="b2">Try a different puzzle</button><button id="b3">Close</button></div>`;
+ $('cn').textContent=pname;$('cd').textContent=new Date(Y,Mo-1,D).toLocaleDateString(undefined,o);
+ $('cl').textContent=$('bd').selectedOptions[0].text+' board · '+$('lv').selectedOptions[0].text.split(' (')[0]+' level · '+pieces.length+' pieces';
+ $('cc').textContent=new Date().toLocaleDateString(undefined,o);
+ $('b1').onclick=()=>window.print();$('b2').onclick=()=>{md.hidden=true;newGame()};$('b3').onclick=()=>md.hidden=true}
 newGame();
 </script></body></html>
