@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Calendar Puzzle</title>
+<style>
+:root{--bg:#f6f4ef;--fg:#222;--card:#fff;--cell:#e6e0d2;--line:#b5ad9b;--acc:#2f6f5e;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1c1e20;--fg:#eee;--card:#2a2d30;--cell:#3a3e43;--line:#5a5f66;--acc:#6cc4a8}}
+:root[data-theme="dark"]{--bg:#1c1e20;--fg:#eee;--card:#2a2d30;--cell:#3a3e43;--line:#5a5f66;--acc:#6cc4a8}
+html,body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+body{padding:12px;max-width:1100px;margin:0 auto}
+h1{font-size:1.3rem;margin:4px 0 10px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--card);padding:10px;border-radius:10px;margin-bottom:10px}
+label{font-size:.85rem;display:flex;gap:4px;align-items:center}
+select,input,button{font:inherit;padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
+button{cursor:pointer}button.p{background:var(--acc);color:#fff;border-color:var(--acc)}
+#st{margin-left:auto;font-weight:600}
+svg{width:100%;height:auto;touch-action:none;user-select:none;background:var(--card);border-radius:10px;display:block}
+.cell{fill:var(--cell);stroke:var(--line);stroke-width:1}.tgt{fill:#fff}.lb.tl{fill:#222}
+.lb{fill:var(--fg);text-anchor:middle;dominant-baseline:central;pointer-events:none;font-weight:600}
+.pc{stroke:#fff;stroke-width:1.5;cursor:grab;stroke-linejoin:round}.pc.sel{stroke:var(--fg);stroke-width:3}
+p.h{font-size:.82rem;opacity:.75;margin:8px 2px}
+</style></head><body>
+<h1>Calendar Puzzle</h1>
+<div class="bar">
+<label>Board <select id="bd"><option value="squares">Squares</option><option value="triangles">Triangles</option><option value="hexagons">Hexagons</option></select></label>
+<label>Level <select id="lv"><option value="14">Easy (14 pieces)</option><option value="12" selected>Medium (12)</option><option value="10">Hard (10)</option></select></label>
+<label>Date <input type="date" id="dt"></label>
+<button id="rot">Rotate ↻</button><button id="flp">Flip ⇋</button>
+<button id="nw">New pieces</button><button id="rs">Reset</button><button id="sol">Solution</button>
+<span id="st"></span></div>
+<svg id="svg"><g id="L"></g></svg>
+<p class="h">Drag pieces onto the board. To rotate a piece, press Space, click it again, or twist two fingers on it (touch screens). Flip with the Flip button or F. Cover everything except the month, day and weekday of the chosen date.</p>
+<script>
+const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const S3=Math.sqrt(3),$=id=>document.getElementById(id);
+const rg=(a,b)=>Array.from({length:b-a+1},(_,i)=>a+i);
+let board,pieces=[],sel=null,drag=null,tgt=[];
+const mk=(l,poly)=>{const k=l===''?'b':typeof l==='number'?'d':MONTHS.includes(l)?'m':'w';
+ return{label:String(l),kind:k,val:k==='d'?l:k==='m'?MONTHS.indexOf(l):DAYS.indexOf(l),poly,c:[0,1].map(i=>poly.reduce((s,p)=>s+p[i],0)/poly.length)}};
+function buildBoard(kind){
+ const cells=[];let step=Math.PI/3,fs=13;
+ const rows=[MONTHS.slice(0,6),MONTHS.slice(6),rg(1,7),rg(8,14),rg(15,21),rg(22,28),[29,30,31,'Sun','Mon','Tue','Wed'],['Thu','Fri','Sat']];
+ if(kind==='squares'){const s=46;step=Math.PI/2;fs=15;
+  rows.forEach((row,r)=>row.forEach((l,j)=>{const c=(r==7?4:0)+j;cells.push(mk(l,[[c,r],[c+1,r],[c+1,r+1],[c,r+1]].map(p=>[p[0]*s,p[1]*s])))}))}
+ else if(kind==='hexagons'){const R=32,H=[[2,['Jan','Feb','Mar',1,2,3]],[1,['Apr','May','Jun',4,5,6,7]],[0,['Jul','Aug','Sep',8,9,10,11,12]],[1,['Oct','Nov',13,14,15,16,17,'Sun']],[2,['Dec',18,19,20,21,22,'Mon','Tue']],[3,[23,24,25,26,27,'Wed','Thu']],[4,[28,29,30,31,'Fri','Sat']]];
+  H.forEach(([h0,row],r)=>row.forEach((l,j)=>{const cx=(h0+2*j)*S3*R/2,cy=1.5*R*r;
+   cells.push(mk(l,[0,1,2,3,4,5].map(k=>{const a=(60*k-30)*Math.PI/180;return[cx+R*Math.cos(a),cy+R*Math.sin(a)]})))}))}
+ else{const s=72,h=S3/2;fs=12;
+  const P=(u,v)=>[(u+v/2)*s,v*h*s];
+  const T=[[-3,'U',-1,['Apr','Jan','May','Feb','Jun','Mar','Jul']],[-2,'U',-2,[1,'','Oct','Aug','Nov','Sep','Dec','',2]],[-1,'U',-3,[8,3,9,4,10,5,11,6,12,7,13]],[0,'D',-3,[14,20,15,21,16,22,17,23,18,24,19]],[1,'D',-3,[25,'',26,30,27,31,28,'',29]],[2,'D',-3,['Mon','Fri','Tue','Sat','Wed','Sun','Thu']]];
+  T.forEach(([j,ty,a,row])=>row.forEach(l=>{
+   const pts=ty==='D'?[[a,j],[a+1,j],[a,j+1]]:[[a+1,j],[a+1,j+1],[a,j+1]];
+   cells.push(mk(l,pts.map(p=>P(p[0],p[1]))));if(ty==='U'){ty='D';a++}else ty='U'}))}
+ let m=1e9;cells.forEach((a,i)=>cells.forEach((b,j)=>{if(i<j)m=Math.min(m,Math.hypot(a.c[0]-b.c[0],a.c[1]-b.c[1]))}));
+ const adj=cells.map((a,i)=>cells.map((b,j)=>j!=i&&Math.hypot(a.c[0]-b.c[0],a.c[1]-b.c[1])<m*1.2?j:-1).filter(j=>j>=0));
+ return{kind,cells,adj,m,step,fs}}
+const shuf=a=>{for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a};
+function enumSets(st,size,free){let lv=[[st]];for(let i=1;i<size;i++){const seen=new Set(),nx=[];
+ for(const s of lv)for(const x of s)for(const y of board.adj[x])if(free[y]&&!s.includes(y)){const t=[...s,y].sort((a,b)=>a-b),k=t.join();if(!seen.has(k)){seen.add(k);nx.push(t)}}lv=nx}return lv}
+function partition(k){
+ const total=board.cells.length-3;k=Math.max(k,Math.ceil(total/5));
+ for(let at=0;at<300;at++){
+  const sz=Array(k).fill(3);let ex=total-3*k;while(ex>0){const i=Math.random()*k|0;if(sz[i]<5){sz[i]++;ex--}}
+  const cnt={3:0,4:0,5:0};sz.forEach(x=>cnt[x]++);
+  const free=board.cells.map((_,i)=>!tgt.includes(i)),out=[];let steps=0;
+  const rec=()=>{let best=-1,bd=9;
+   for(let i=0;i<free.length;i++)if(free[i]){const d=board.adj[i].filter(j=>free[j]).length;if(d<bd){bd=d;best=i}}
+   if(best<0)return true;if(bd==0||++steps>4000)return false;
+   for(const n of shuf([3,4,5].filter(n=>cnt[n]>0)))for(const s of shuf(enumSets(best,n,free))){
+    s.forEach(i=>free[i]=false);cnt[n]--;out.push(s);if(rec())return true;out.pop();cnt[n]++;s.forEach(i=>free[i]=true);if(steps>4000)return false}
+   return false};
+  if(rec())return out}
+ return null}
+const M=(p,q)=>{const x=p.flip?-q[0]:q[0],y=q[1],a=p.rot*board.step,c=Math.cos(a),s=Math.sin(a);return[x*c-y*s,x*s+y*c]};
+function newGame(keep){
+ board=buildBoard($('bd').value);const [Y,Mo,D]=$('dt').value.split('-').map(Number);
+ const d=new Date(Y,Mo-1,D);
+ tgt=[board.cells.findIndex(c=>c.kind==='m'&&c.val==d.getMonth()),board.cells.findIndex(c=>c.kind==='d'&&c.val==d.getDate()),board.cells.findIndex(c=>c.kind==='w'&&c.val==d.getDay())];
+ const parts=partition(+$('lv').value);
+ pieces=parts.map((idx,i)=>{const cc=idx.map(j=>board.cells[j].c);
+  return{id:i,cells:idx,polys:idx.map(j=>board.cells[j].poly),cc,cen:[0,1].map(a=>cc.reduce((s,c)=>s+c[a],0)/cc.length),rot:0,flip:0,tx:0,ty:0,at:null,col:Math.round(i*360/parts.length)}});
+ sel=null;layout();render()}
+function layout(){
+ const cs=board.cells;let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+ cs.forEach(c=>c.poly.forEach(p=>{x0=Math.min(x0,p[0]);y0=Math.min(y0,p[1]);x1=Math.max(x1,p[0]);y1=Math.max(y1,p[1])}));
+ const m=20,g=16,bw=x1-x0,bh=y1-y0;board.off=[m-x0,m-y0];board.bw=bw;board.bh=bh;
+ cs.forEach(c=>c.sc=[c.c[0]+board.off[0],c.c[1]+board.off[1]]);
+ pieces.forEach(p=>{p.rot=Math.random()*(Math.round(2*Math.PI/board.step))|0;p.flip=Math.random()<.5?1:0;p.at=null;
+  let a=1e9,b=1e9,c=-1e9,d=-1e9;p.polys.forEach(po=>po.forEach(q=>{const r=M(p,q);a=Math.min(a,r[0]);b=Math.min(b,r[1]);c=Math.max(c,r[0]);d=Math.max(d,r[1])}));
+  p.bb=[a,b,c-a,d-b]});
+ const maxW=Math.max(...pieces.map(p=>p.bb[2]));let best=null;
+ for(const mode of ['side','below'])for(let tw=Math.ceil(maxW);tw<=900;tw+=30){
+  let x=0,y=0,rh=0;const pos=[];
+  pieces.forEach(p=>{if(x>0&&x+p.bb[2]>tw){x=0;y+=rh+g;rh=0}pos.push([x,y]);x+=p.bb[2]+g;rh=Math.max(rh,p.bb[3])});
+  const th=y+rh;let ox,oy,W,H;
+  if(mode=='side'){ox=m+bw+2*g;oy=m;W=ox+tw+m;H=Math.max(bh+2*m,th+2*m)}else{ox=m;oy=m+bh+2*g;W=Math.max(bw,tw)+2*m;H=oy+th+m}
+  const sc=Math.abs(Math.log(W/H/1.4));if(!best||sc<best.sc)best={sc,pos,ox,oy,W,H}}
+ pieces.forEach((p,i)=>{p.tx=best.ox+best.pos[i][0]-p.bb[0];p.ty=best.oy+best.pos[i][1]-p.bb[1]});
+ $('svg').setAttribute('viewBox',`0 0 ${best.W} ${best.H}`);board.W=best.W;board.H=best.H}
+function occ(){const o={};pieces.forEach(p=>p.at&&p.at.forEach(k=>o[k]=p.id));return o}
+function findSnap(p,t0){
+ const cs=p.cc.map(c=>M(p,c)),o=occ(),B=board.cells,m=board.m;let best=null;
+ for(let i=0;i<cs.length;i++){const qx=cs[i][0]+t0[0],qy=cs[i][1]+t0[1];
+  for(const b of B){if(Math.hypot(b.sc[0]-qx,b.sc[1]-qy)>m*1.5)continue;
+   const tx=b.sc[0]-cs[i][0],ty=b.sc[1]-cs[i][1],idx=[];let ok=true;
+   for(const c of cs){const x=c[0]+tx,y=c[1]+ty,k=B.findIndex(z=>Math.hypot(z.sc[0]-x,z.sc[1]-y)<m*.3);
+    if(k<0||tgt.includes(k)||o[k]!==undefined){ok=false;break}idx.push(k)}
+   if(ok){const d=Math.hypot(tx-t0[0],ty-t0[1]);if(!best||d<best.d)best={d,t:[tx,ty],idx}}}}
+ return best}
+function trySnap(p){const s=findSnap(p,[p.tx,p.ty]);if(s){p.tx=s.t[0];p.ty=s.t[1];p.at=s.idx}}
+function xf(p,fn){const c=M(p,p.cen),cx=c[0]+p.tx,cy=c[1]+p.ty;p.at=null;fn();const c2=M(p,p.cen);p.tx=cx-c2[0];p.ty=cy-c2[1];if(!(drag&&drag.p===p))trySnap(p);else{drag.t0=[p.tx,p.ty];drag.s=drag.last}front(p);render()}
+const n=()=>Math.round(2*Math.PI/board.step);
+const rotate=p=>xf(p,()=>p.rot=(p.rot+1)%n()),flip=p=>xf(p,()=>{p.flip^=1;p.rot=(n()-p.rot)%n()});
+const front=p=>{pieces.splice(pieces.indexOf(p),1);pieces.push(p)};
+function render(){
+ const B=board.cells,o=board.off;let h='';
+ B.forEach((c,i)=>{h+=`<polygon class="cell${tgt.includes(i)?' tgt':''}" points="${c.poly.map(q=>(q[0]+o[0]).toFixed(1)+','+(q[1]+o[1]).toFixed(1)).join(' ')}"/>`});
+ B.forEach((c,i)=>h+=`<text class="lb${tgt.includes(i)?' tl':''}" x="${c.sc[0].toFixed(1)}" y="${c.sc[1].toFixed(1)}" font-size="${board.fs}">${c.label}</text>`);
+ const ord=[...pieces].sort((a,b)=>(a.at?0:1)-(b.at?0:1)||pieces.indexOf(a)-pieces.indexOf(b));
+ if(drag)ord.push(ord.splice(ord.indexOf(drag.p),1)[0]);
+ ord.forEach(p=>{h+=`<g data-id="${p.id}" class="pc${sel===p.id?' sel':''}" style="fill:hsl(${p.col} 55% ${p.at?58:66}%)">`;
+  p.polys.forEach(po=>{h+=`<polygon class="pc${sel===p.id?' sel':''}" data-id="${p.id}" points="${po.map(q=>{const r=M(p,q);return(r[0]+p.tx).toFixed(1)+','+(r[1]+p.ty).toFixed(1)}).join(' ')}"/>`});h+='</g>'});
+ $('L').innerHTML=h;
+ const k=pieces.filter(p=>p.at).length;
+ $('st').textContent=k==pieces.length?'Solved! 🎉':`${k} / ${pieces.length} placed`}
+const svg=$('svg');
+const pt=e=>{const p=svg.createSVGPoint();p.x=e.clientX;p.y=e.clientY;const q=p.matrixTransform(svg.getScreenCTM().inverse());return[q.x,q.y]};
+let gest=null;
+function gturn(){const a=Math.atan2(gest.q[1]-drag.last[1],gest.q[0]-drag.last[0]);let d=a-gest.prev;d=Math.atan2(Math.sin(d),Math.cos(d));gest.prev=a;gest.acc+=d;const k=Math.round(gest.acc/board.step);if(k!==gest.k){const dk=k-gest.k;gest.k=k;xf(drag.p,()=>drag.p.rot=((drag.p.rot+dk)%n()+n())%n())}}
+svg.addEventListener('pointerdown',e=>{if(drag&&e.pointerId!==drag.id){if(gest)return;const q=pt(e);drag.moved=true;drag.p.at=null;svg.setPointerCapture(e.pointerId);gest={id:e.pointerId,q,prev:Math.atan2(q[1]-drag.last[1],q[0]-drag.last[0]),acc:0,k:0};return}const el=e.target.closest('[data-id]');if(!el)return;
+ const p=pieces.find(x=>x.id==el.dataset.id);drag={id:e.pointerId,p,s:pt(e),last:pt(e),t0:[p.tx,p.ty],moved:false,was:sel===p.id,wasAt:p.at};
+ sel=p.id;svg.setPointerCapture(e.pointerId);front(p);render()});
+svg.addEventListener('pointermove',e=>{if(!drag)return;const q=pt(e);if(gest&&e.pointerId===gest.id){gest.q=q;gturn();return}if(e.pointerId!==drag.id)return;drag.last=q;if(gest)gturn();const dx=q[0]-drag.s[0],dy=q[1]-drag.s[1];
+ if(!drag.moved&&Math.hypot(dx,dy)<4)return;drag.moved=true;drag.p.at=null;drag.p.tx=drag.t0[0]+dx;drag.p.ty=drag.t0[1]+dy;render()});
+const upH=e=>{if(!drag)return;if(gest&&e.pointerId===gest.id){gest=null;return}if(e.pointerId!==drag.id)return;gest=null;const d=drag;drag=null;
+ if(!d.moved){if(d.was)rotate(d.p);else render();return}
+ trySnap(d.p);render()};
+svg.addEventListener('pointerup',upH);svg.addEventListener('pointercancel',upH);
+$('rot').onclick=()=>{const p=pieces.find(x=>x.id===sel);p&&rotate(p)};
+$('flp').onclick=()=>{const p=pieces.find(x=>x.id===sel);p&&flip(p)};
+addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;const p=pieces.find(x=>x.id===sel);
+ if(e.key===' '){e.preventDefault();if(p&&!e.repeat)rotate(p);return}
+ if(!p)return;if(e.key==='r'||e.key==='R')rotate(p);if(e.key==='f'||e.key==='F')flip(p)});
+addEventListener('keyup',e=>{if(e.key===' '&&e.target.tagName!=='INPUT'&&e.target.tagName!=='SELECT')e.preventDefault()});
+$('nw').onclick=()=>newGame();
+$('rs').onclick=()=>{layout();render()};
+$('sol').onclick=()=>{pieces.forEach(p=>{p.rot=0;p.flip=0;p.tx=board.off[0];p.ty=board.off[1];p.at=p.cells.slice()});sel=null;render();$('st').textContent='Solution shown'};
+['bd','lv','dt'].forEach(id=>$(id).onchange=()=>newGame());
+const t=new Date(),z=x=>String(x).padStart(2,'0');
+$('dt').value=`${t.getFullYear()}-${z(t.getMonth()+1)}-${z(t.getDate())}`;
+newGame();
+</script></body></html>
